@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Змейка — Современная игра</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-2: #273548;
+      --accent: #22d3ee;
+      --accent-2: #a78bfa;
+      --food: #fb7185;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --snake-head: #34d399;
+      --snake-body: #10b981;
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: "Rubik", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(1200px 800px at 20% -10%, #1e293b 0%, var(--bg) 55%) fixed;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh;
+      padding: clamp(8px, 2vw, 24px);
+      overscroll-behavior: none;
+      touch-action: manipulation;
+    }
+
+    .game-shell {
+      width: min(100%, 520px);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    header.topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: clamp(18px, 4.5vw, 24px);
+      letter-spacing: 0.5px;
+    }
+
+    .logo .dot {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 14px rgba(34, 211, 238, 0.7);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.25); opacity: 0.75; }
+    }
+
+    .scores {
+      display: flex;
+      gap: 8px;
+    }
+
+    .score-chip {
+      background: var(--panel);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 12px;
+      padding: 6px 12px;
+      text-align: center;
+      min-width: 74px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .score-chip.bump { animation: bump 0.35s ease; }
+
+    @keyframes bump {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.12); box-shadow: 0 0 16px rgba(34, 211, 238, 0.35); }
+      100% { transform: scale(1); }
+    }
+
+    .score-chip .label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--muted);
+    }
+
+    .score-chip .value {
+      font-size: 20px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .score-chip.best .value { color: var(--accent); }
+
+    .board-wrap {
+      position: relative;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+      background: var(--panel);
+      aspect-ratio: 1 / 1;
+    }
+
+    canvas#board {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    /* Оверлеи (старт / пауза / конец игры) */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+      text-align: center;
+      z-index: 5;
+    }
+
+    .overlay.visible { opacity: 1; pointer-events: auto; }
+
+    .overlay h2 {
+      font-size: clamp(22px, 6vw, 30px);
+      font-weight: 800;
+    }
+
+    .overlay .subtitle { color: var(--muted); font-size: 14px; max-width: 320px; line-height: 1.5; }
+
+    .difficulty {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .diff-btn {
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 999px;
+      padding: 8px 16px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+
+    .diff-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+    .diff-btn.active {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #0f172a;
+      border-color: transparent;
+      box-shadow: 0 6px 18px rgba(34, 211, 238, 0.35);
+    }
+
+    .btn {
+      border: none;
+      border-radius: 12px;
+      padding: 12px 26px;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      color: #0f172a;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 10px 24px rgba(34, 211, 238, 0.35);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+    }
+
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(34, 211, 238, 0.45); }
+    .btn:active { transform: translateY(0) scale(0.97); }
+
+    .btn.secondary {
+      background: var(--panel-2);
+      color: var(--text);
+      box-shadow: none;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+
+    .new-record {
+      color: #fbbf24;
+      font-weight: 800;
+      animation: glow 1.2s ease-in-out infinite alternate;
+      display: none;
+    }
+
+    .new-record.show { display: block; }
+
+    @keyframes glow {
+      from { text-shadow: 0 0 6px rgba(251, 191, 36, 0.4); }
+      to   { text-shadow: 0 0 18px rgba(251, 191, 36, 0.9); }
+    }
+
+    /* Панель управления */
+    .controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .ctrl-group { display: flex; gap: 8px; }
+
+    .icon-btn {
+      width: 46px; height: 46px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 20px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: all 0.15s ease;
+    }
+
+    .icon-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .icon-btn:active { transform: scale(0.94); }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    /* D-pad для сенсорных устройств */
+    .dpad {
+      display: none;
+      grid-template-columns: repeat(3, 56px);
+      grid-template-rows: repeat(3, 56px);
+      gap: 6px;
+      justify-content: center;
+      margin-top: 2px;
+      user-select: none;
+    }
+
+    .dpad button {
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: var(--panel);
+      color: var(--accent);
+      font-size: 22px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: background 0.1s ease, transform 0.1s ease;
+    }
+
+    .dpad button:active { background: var(--panel-2); transform: scale(0.92); }
+
+    .dpad .up    { grid-column: 2; grid-row: 1; }
+    .dpad .left  { grid-column: 1; grid-row: 2; }
+    .dpad .right { grid-column: 3; grid-row: 2; }
+    .dpad .down  { grid-column: 2; grid-row: 3; }
+    .dpad .center{ grid-column: 2; grid-row: 2; border: none; background: transparent; font-size: 12px; color: var(--muted); }
+
+    @media (pointer: coarse) {
+      .dpad { display: grid; }
+      .hint.desktop { display: none; }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .hint.touch { display: none; }
+    }
+
+    @media (max-width: 420px) {
+      .dpad { grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(3, 50px); }
+      .score-chip { min-width: 64px; padding: 5px 9px; }
+      .score-chip .value { font-size: 17px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="game-shell">
+    <header class="topbar">
+      <div class="logo"><span class="dot"></span>ЗМЕЙКА</div>
+      <div class="scores">
+        <div class="score-chip" id="scoreChip">
+          <div class="label">Счёт</div>
+          <div class="value" id="scoreVal">0</div>
+        </div>
+        <div class="score-chip best">
+          <div class="label">Рекорд</div>
+          <div class="value" id="bestVal">0</div>
+        </div>
+      </div>
+    </header>
+
+    <div class="board-wrap">
+      <canvas id="board"></canvas>
+
+      <!-- Стартовый экран -->
+      <div class="overlay visible" id="startOverlay">
+        <h2>Готовы играть?</h2>
+        <p class="subtitle">Выберите сложность и управляйте змейкой стрелками, WASD или свайпами.</p>
+        <div class="difficulty" role="group" aria-label="Сложность">
+          <button class="diff-btn" data-speed="160">Лёгкая</button>
+          <button class="diff-btn active" data-speed="110">Средняя</button>
+          <button class="diff-btn" data-speed="70">Сложная</button>
+          <button class="diff-btn" data-speed="45">Безумная</button>
+        </div>
+        <button class="btn" id="startBtn">Начать игру</button>
+      </div>
+
+      <!-- Пауза -->
+      <div class="overlay" id="pauseOverlay">
+        <h2>Пауза</h2>
+        <p class="subtitle">Нажмите пробел или кнопку ▶, чтобы продолжить.</p>
+        <div class="ctrl-group">
+          <button class="btn" id="resumeBtn">Продолжить</button>
+          <button class="btn secondary" id="pauseRestartBtn">Заново</button>
+        </div>
+      </div>
+
+      <!-- Конец игры -->
+      <div class="overlay" id="gameOverOverlay">
+        <h2>Игра окончена</h2>
+        <div class="new-record" id="newRecordMsg">🏆 Новый рекорд!</div>
+        <p class="subtitle" id="finalScoreMsg">Ваш счёт: 0</p>
+        <div class="ctrl-group">
+          <button class="btn" id="restartBtn">Играть снова</button>
+          <button class="btn secondary" id="menuBtn">В меню</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="ctrl-group">
+        <button class="icon-btn" id="pauseBtn" title="Пауза / продолжить (пробел)" aria-label="Пауза">⏸</button>
+        <button class="icon-btn" id="restartIconBtn" title="Перезапуск (R)" aria-label="Перезапуск">↻</button>
+      </div>
+      <div class="ctrl-group">
+        <button class="icon-btn" id="soundBtn" title="Звук вкл/выкл" aria-label="Звук">🔊</button>
+      </div>
+    </div>
+
+    <div class="dpad" aria-label="Сенсорное управление">
+      <button class="up" data-dir="up" aria-label="Вверх">▲</button>
+      <button class="left" data-dir="left" aria-label="Влево">◀</button>
+      <button class="center">SWIPE</button>
+      <button class="right" data-dir="right" aria-label="Вправо">▶</button>
+      <button class="down" data-dir="down" aria-label="Вниз">▼</button>
+    </div>
+
+    <p class="hint desktop">Стрелки / WASD — движение · Пробел — пауза · R — перезапуск</p>
+    <p class="hint touch">Свайпайте по полю или используйте кнопки ниже</p>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>
