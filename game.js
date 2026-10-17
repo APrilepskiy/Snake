@@ -140,33 +140,40 @@
   }
 
   function step(now) {
-    game.dir = game.nextDir;
-    const head = game.snake[0];
-    const nx = head.x + game.dir.x;
-    const ny = head.y + game.dir.y;
+    try {
+      game.dir = game.nextDir;
+      const head = game.snake[0];
+      const nx = head.x + game.dir.x;
+      const ny = head.y + game.dir.y;
 
-    // столкновение со стеной
-    if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) return gameOver(now);
+      // столкновение со стеной
+      if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) return gameOver(now);
 
-    // столкновение с телом (хвост сдвинется, поэтому исключаем последнюю клетку,
-    // если не съедена еда)
-    const willEat = nx === game.food.x && ny === game.food.y;
-    const bodyLen = willEat ? game.snake.length : game.snake.length - 1;
-    for (let i = 0; i < bodyLen; i++) {
-      if (game.snake[i].x === nx && game.snake[i].y === ny) return gameOver(now);
-    }
+      // столкновение с телом (хвост сдвинется, поэтому исключаем последнюю клетку,
+      // если не съедена еда)
+      const willEat = nx === game.food.x && ny === game.food.y;
+      const bodyLen = willEat ? game.snake.length : game.snake.length - 1;
+      for (let i = 0; i < bodyLen; i++) {
+        if (game.snake[i].x === nx && game.snake[i].y === ny) return gameOver(now);
+      }
 
-    game.snake.unshift({ x: nx, y: ny });
+      game.snake.unshift({ x: nx, y: ny });
 
-    if (willEat) {
-      game.score += 10;
-      game.eatFlash = 1;
-      burstParticles(nx, ny);
-      beep(660 + Math.min(game.score, 300), 0.07, "square", 0.05);
-      updateScoreUI(true);
-      spawnFood();
-    } else {
-      game.snake.pop();
+      if (willEat) {
+        game.score += 10;
+        game.eatFlash = 1;
+        burstParticles(nx, ny);
+        beep(660 + Math.min(game.score, 300), 0.07, "square", 0.05);
+        updateScoreUI(true);
+        spawnFood();
+      } else {
+        game.snake.pop();
+      }
+    } catch (err) {
+      // Критическая защита: любая ошибка внутри шага раньше «вешала» игру
+      // (requestAnimationFrame прекращался, змейка останавливалась).
+      console.error("Ошибка шага игры:", err);
+      try { gameOver(performance.now()); } catch {}
     }
   }
 
@@ -187,6 +194,7 @@
   }
 
   function gameOver(now) {
+    if (game.state === State.OVER) return; // защита от повторного вызова
     game.state = State.OVER;
     game.deathAt = now;
     beep(180, 0.25, "sawtooth", 0.06);
@@ -204,6 +212,7 @@
   }
 
   function winGame() {
+    if (game.state === State.OVER) return; // защита от повторного вызова
     game.state = State.OVER;
     finalScoreMsg.textContent = `Невероятно! Поле заполнено. Счёт: ${game.score}`;
     if (game.score > game.best) { game.best = game.score; saveBest(game.best); updateScoreUI(); }
@@ -550,16 +559,25 @@
   }
 
   // ---------- Главный цикл ----------
+  let rafId = 0;
+
   function loop(now) {
-    if (game.state === State.RUNNING) {
-      // несколько шагов за кадр на высокой скорости
-      while (now - game.lastStep >= game.speed && game.state === State.RUNNING) {
-        game.lastStep += game.speed;
-        step(now);
+    try {
+      if (game.state === State.RUNNING) {
+        // защита от «догоняющих» шагов после фоновой вкладки/залипшего кадра:
+        // не более одного шага за кадр + сброс таймера, если отстаём сильно
+        if (now - game.lastStep >= game.speed) {
+          if (now - game.lastStep > game.speed * 3) game.lastStep = now - game.speed;
+          game.lastStep += game.speed;
+          step(now);
+        }
       }
+      drawBoard(now);
+    } catch (err) {
+      // Никогда не роняем requestAnimationFrame — иначе игра «зависает» навсегда
+      console.error("Ошибка игрового цикла:", err);
     }
-    drawBoard(now);
-    requestAnimationFrame(loop);
+    rafId = requestAnimationFrame(loop);
   }
 
   // ---------- Инициализация ----------
